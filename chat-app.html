@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZAMP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161d;
+    --surface2: #1e1e28;
+    --border: #2a2a38;
+    --accent: #c8a96e;
+    --accent2: #e8c98e;
+    --text: #f0ede8;
+    --text-muted: #7a7a8a;
+    --sent: #2a2218;
+    --sent-border: #c8a96e44;
+    --recv: #1e1e28;
+    --green: #4caf7d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .screen { display: none; width: 100%; height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* ── SETUP BANNER ── */
+  #setup-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+    background: #ff6b6b22; border-bottom: 1px solid #ff6b6b55;
+    color: #ff6b6b; font-size: 0.82rem; padding: 10px 20px;
+    text-align: center; display: none;
+  }
+  #setup-banner.show { display: block; }
+  #setup-banner a { color: #ff9999; }
+
+  /* ── LOADING ── */
+  #screen-loading {
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-muted); font-size: 0.9rem; }
+
+  /* ── SELECT SCREEN ── */
+  #screen-select {
+    flex-direction: column; align-items: center; justify-content: center; gap: 40px;
+    background: radial-gradient(ellipse at 50% 0%, #1e1a10 0%, var(--bg) 70%);
+  }
+
+  .logo {
+    font-family: 'DM Serif Display', serif; font-size: 3rem;
+    letter-spacing: -1px; color: var(--accent2); text-shadow: 0 0 40px #c8a96e55;
+  }
+  .logo span {
+    color: var(--text-muted); font-size: 1.1rem; font-family: 'DM Sans', sans-serif;
+    display: block; text-align: center; margin-top: 6px; letter-spacing: 3px; text-transform: uppercase;
+  }
+
+  .member-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; width: 380px; }
+
+  .member-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px 20px; cursor: pointer; text-align: center; transition: all 0.2s; overflow: hidden;
+  }
+  .member-card:hover {
+    border-color: var(--accent); background: var(--surface2);
+    transform: translateY(-2px); box-shadow: 0 8px 32px #c8a96e22;
+  }
+  .member-card .avatar {
+    width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 12px;
+    background: var(--surface2); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; overflow: hidden;
+  }
+  .member-card .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .member-card .name { font-weight: 600; font-size: 1rem; }
+  .member-card .status { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+  .member-card .status.setup { color: var(--accent); }
+  .member-card .status.ready { color: var(--green); }
+
+  /* ── AUTH SCREEN ── */
+  #screen-auth {
+    flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 0%, #1e1a10 0%, var(--bg) 70%);
+  }
+
+  .auth-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 40px; width: 360px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .auth-box h2 { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--accent2); }
+  .auth-box p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+
+  .auth-avatar {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--surface2); border: 2px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; overflow: hidden;
+  }
+  .auth-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  input[type="password"], input[type="text"] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 16px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--accent); }
+
+  .btn {
+    padding: 13px 20px; border-radius: 10px; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: #0e0e12; }
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .error-msg { color: #ff6b6b; font-size: 0.85rem; display: none; }
+  .error-msg.show { display: block; }
+
+  /* ── CHAT SCREEN ── */
+  #screen-chat { flex-direction: row; }
+
+  .sidebar {
+    width: 280px; min-width: 280px; background: var(--surface);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 24px 20px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .my-avatar {
+    width: 44px; height: 44px; border-radius: 50%; background: var(--surface2);
+    border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; cursor: pointer; overflow: hidden; position: relative; transition: opacity 0.2s;
+  }
+  .my-avatar:hover { opacity: 0.8; }
+  .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .my-avatar .edit-overlay {
+    position: absolute; inset: 0; background: #00000088;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; opacity: 0; transition: opacity 0.2s; border-radius: 50%;
+  }
+  .my-avatar:hover .edit-overlay { opacity: 1; }
+
+  .my-info { flex: 1; }
+  .my-info .my-name { font-weight: 600; font-size: 0.95rem; }
+  .my-info .my-label { font-size: 0.75rem; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+
+  .logout-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 1.1rem; padding: 4px; transition: color 0.2s;
+  }
+  .logout-btn:hover { color: #ff6b6b; }
+
+  .members-label {
+    padding: 16px 20px 8px; font-size: 0.7rem;
+    color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase;
+  }
+  .member-list { flex: 1; overflow-y: auto; }
+
+  .member-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; cursor: pointer; transition: background 0.15s; position: relative;
+  }
+  .member-item:hover { background: var(--surface2); }
+  .member-item.active { background: var(--surface2); border-left: 3px solid var(--accent); padding-left: 17px; }
+
+  .member-item .av {
+    width: 40px; height: 40px; border-radius: 50%; background: var(--bg);
+    border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; overflow: hidden; flex-shrink: 0;
+  }
+  .member-item .av img { width: 100%; height: 100%; object-fit: cover; }
+  .member-item .info .nm { font-weight: 500; font-size: 0.9rem; }
+  .member-item .info .preview {
+    font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+  }
+  .unread-badge {
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    background: var(--accent); color: #0e0e12; border-radius: 50%;
+    width: 18px; height: 18px; font-size: 0.7rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Chat area */
+  .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+
+  .chat-header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px; background: var(--surface);
+  }
+  .chat-header .av {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--surface2);
+    border: 1.5px solid var(--border); display: flex; align-items: center;
+    justify-content: center; font-size: 1.1rem; overflow: hidden;
+  }
+  .chat-header .av img { width: 100%; height: 100%; object-fit: cover; }
+  .chat-header .hname { font-weight: 600; }
+  .chat-header .hstatus { font-size: 0.78rem; color: var(--green); }
+
+  .no-chat {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; color: var(--text-muted);
+  }
+  .no-chat .icon { font-size: 3rem; }
+
+  .messages {
+    flex: 1; overflow-y: auto; padding: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .msg {
+    max-width: 65%; padding: 10px 16px; border-radius: 18px;
+    font-size: 0.9rem; line-height: 1.5; word-break: break-word;
+  }
+  .msg.sent {
+    align-self: flex-end; background: var(--sent);
+    border: 1px solid var(--sent-border); border-bottom-right-radius: 4px; color: var(--accent2);
+  }
+  .msg.recv {
+    align-self: flex-start; background: var(--recv);
+    border: 1px solid var(--border); border-bottom-left-radius: 4px;
+  }
+  .msg-time { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+  .msg-time.right { text-align: right; }
+
+  .date-divider {
+    text-align: center; font-size: 0.72rem; color: var(--text-muted);
+    padding: 8px 0; letter-spacing: 1px;
+  }
+
+  .empty-convo {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; color: var(--text-muted);
+  }
+  .empty-convo .big { font-size: 2.5rem; margin-bottom: 8px; }
+
+  .chat-input-area {
+    padding: 16px 24px; border-top: 1px solid var(--border);
+    display: flex; gap: 12px; align-items: flex-end; background: var(--surface);
+  }
+  .chat-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 24px; padding: 12px 20px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 0.9rem; outline: none;
+    resize: none; max-height: 120px; transition: border-color 0.2s; line-height: 1.4;
+  }
+  .chat-input:focus { border-color: var(--accent); }
+
+  .send-btn {
+    width: 44px; height: 44px; border-radius: 50%; background: var(--accent);
+    border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .send-btn:hover { background: var(--accent2); transform: scale(1.05); }
+  .send-btn svg { width: 18px; height: 18px; fill: #0e0e12; }
+
+  /* Tick indicators */
+  .msg-status { display: inline-flex; align-items: center; margin-left: 4px; vertical-align: middle; }
+  .tick { display: inline-block; font-size: 0.78rem; line-height: 1; }
+  .tick-sent { color: var(--text-muted); }
+  .tick-delivered { color: var(--text-muted); }
+  .tick-read { color: #4fc3f7; }
+
+  #avatar-input { display: none; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .auth-box, .member-card { animation: fadeUp 0.3s ease both; }
+  .member-card:nth-child(1) { animation-delay: 0.05s; }
+  .member-card:nth-child(2) { animation-delay: 0.1s; }
+  .member-card:nth-child(3) { animation-delay: 0.15s; }
+  .member-card:nth-child(4) { animation-delay: 0.2s; }
+  .msg { animation: fadeUp 0.2s ease both; }
+</style>
+</head>
+<body>
+
+<!-- ⚠️ Setup reminder banner -->
+<div id="setup-banner">
+  ⚠️ <strong>Action needed:</strong> Replace the Supabase URL and Key below in the script before deploying.
+  <a href="#" onclick="document.getElementById('setup-banner').style.display='none'">Dismiss</a>
+</div>
+
+<!-- LOADING -->
+<div id="screen-loading" class="screen active">
+  <div class="spinner"></div>
+  <div class="loading-text">Connecting...</div>
+</div>
+
+<!-- SELECT -->
+<div id="screen-select" class="screen">
+  <div class="logo">ZAMP <span>• Private Messenger</span></div>
+  <div class="member-grid" id="member-grid"></div>
+</div>
+
+<!-- AUTH -->
+<div id="screen-auth" class="screen">
+  <div class="auth-box">
+    <div class="auth-avatar" id="auth-avatar"></div>
+    <div>
+      <h2 id="auth-title">Welcome</h2>
+      <p id="auth-desc">Loading...</p>
+    </div>
+    <input type="password" id="auth-pw" placeholder="Enter password" autocomplete="off" />
+    <input type="password" id="auth-pw2" placeholder="Confirm password" autocomplete="off" style="display:none;" />
+    <p class="error-msg" id="auth-error"></p>
+    <button class="btn btn-primary" id="auth-submit">Continue</button>
+    <button class="btn btn-ghost" id="auth-back">← Back</button>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div id="screen-chat" class="screen">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="my-avatar" id="my-avatar-btn" title="Change photo">
+        <div class="edit-overlay">📷</div>
+      </div>
+      <div class="my-info">
+        <div class="my-name" id="my-name-label"></div>
+        <div class="my-label">You</div>
+      </div>
+      <button class="logout-btn" id="logout-btn" title="Logout">⏏</button>
+    </div>
+    <div class="members-label">Members</div>
+    <div class="member-list" id="sidebar-list"></div>
+  </div>
+
+  <div class="chat-area">
+    <div class="no-chat" id="no-chat">
+      <div class="icon">💬</div>
+      <p>Select a member to start chatting</p>
+    </div>
+    <div id="active-chat" style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+      <div class="chat-header" id="chat-header"></div>
+      <div class="messages" id="messages"></div>
+      <div class="chat-input-area">
+        <textarea class="chat-input" id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+        <button class="send-btn" id="send-btn">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="avatar-input" accept="image/*" />
+
+<script>
+// ════════════════════════════════════════════════
+//  🔧 STEP 1: PASTE YOUR SUPABASE CREDENTIALS HERE
+// ════════════════════════════════════════════════
+const SUPABASE_URL = 'https://tkxrbkiebhaibdfnfcqz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRreHJia2llYmhhaWJkZm5mY3F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NTk5NjEsImV4cCI6MjA4NzAzNTk2MX0.IFtpl_bIGB1PQkX_PHvspyy-ETGour4TsJicUTKJ0Tw';
+// ════════════════════════════════════════════════
+
+const MEMBERS = [
+  { id: 'aakash', name: 'Aakash', emoji: '🧑' },
+  { id: 'parth',  name: 'Parth',  emoji: '👦' },
+  { id: 'buggy',  name: 'Buggy',  emoji: '👩' },
+  { id: 'zainab', name: 'Zainab', emoji: '👧' },
+];
+
+// Show banner if not configured
+if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+  document.getElementById('setup-banner').classList.add('show');
+}
+
+// Init Supabase
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// App state
+let currentUser = null;
+let currentChat = null;
+let profilesCache = {};   // { memberId: { avatar_url, has_password } }
+let messagesCache = [];
+let realtimeSub = null;
+
+// ── Helpers ──
+function getMember(id) { return MEMBERS.find(m => m.id === id); }
+function getConvoKey(a, b) { return [a, b].sort().join('-'); }
+
+function getAvatarHtml(memberId, size) {
+  const p = profilesCache[memberId];
+  const m = getMember(memberId);
+  if (p && p.avatar_url) return `<img src="${p.avatar_url}" alt="${m.name}" />`;
+  return m.emoji;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getStatusTick(status) {
+  if (status === 'sent')       return `<span class="msg-status"><span class="tick tick-sent">✓</span></span>`;
+  if (status === 'delivered')  return `<span class="msg-status"><span class="tick tick-delivered">✓✓</span></span>`;
+  if (status === 'read')       return `<span class="msg-status"><span class="tick tick-read">✓✓</span></span>`;
+  return '';
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+// ── INIT ──
+async function init() {
+  showScreen('loading');
+  await loadProfiles();
+  renderSelect();
+  showScreen('select');
+}
+
+async function loadProfiles() {
+  const { data } = await db.from('profiles').select('*');
+  if (data) data.forEach(p => { profilesCache[p.member_id] = p; });
+}
+
+// ── SELECT SCREEN ──
+function renderSelect() {
+  const grid = document.getElementById('member-grid');
+  grid.innerHTML = MEMBERS.map(m => {
+    const p = profilesCache[m.id];
+    const isSetup = p && p.password_hash;
+    return `
+      <div class="member-card" onclick="selectMember('${m.id}')">
+        <div class="avatar">${getAvatarHtml(m.id)}</div>
+        <div class="name">${m.name}</div>
+        <div class="status ${isSetup ? 'ready' : 'setup'}">${isSetup ? '● Active' : 'Tap to set up'}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── AUTH ──
+let authMode = null;
+let authUser = null;
+
+function selectMember(id) {
+  authUser = id;
+  const m = getMember(id);
+  const p = profilesCache[id];
+  const isSetup = p && p.password_hash;
+  authMode = isSetup ? 'login' : 'setup';
+
+  const avatarDiv = document.getElementById('auth-avatar');
+  avatarDiv.innerHTML = (p && p.avatar_url) ? `<img src="${p.avatar_url}" />` : m.emoji;
+
+  document.getElementById('auth-title').textContent = isSetup ? `Hi, ${m.name}!` : `Set up ${m.name}'s profile`;
+  document.getElementById('auth-desc').textContent = isSetup
+    ? 'Enter your password to continue.'
+    : 'Create a password to secure your account.';
+
+  document.getElementById('auth-pw').value = '';
+  document.getElementById('auth-pw2').value = '';
+  document.getElementById('auth-pw2').style.display = isSetup ? 'none' : 'block';
+  document.getElementById('auth-submit').textContent = isSetup ? 'Login' : 'Create Profile';
+  document.getElementById('auth-error').classList.remove('show');
+
+  showScreen('auth');
+  setTimeout(() => document.getElementById('auth-pw').focus(), 200);
+}
+
+document.getElementById('auth-back').onclick = () => showScreen('select');
+document.getElementById('auth-submit').onclick = doAuth;
+document.getElementById('auth-pw').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+document.getElementById('auth-pw2').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(); });
+
+// Simple hash (SHA-256 via Web Crypto)
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doAuth() {
+  const pw = document.getElementById('auth-pw').value.trim();
+  const pw2 = document.getElementById('auth-pw2').value.trim();
+  const btn = document.getElementById('auth-submit');
+
+  if (!pw) { showErr('Please enter a password.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Please wait...';
+
+  try {
+    const hash = await hashPassword(pw);
+
+    if (authMode === 'setup') {
+      if (pw.length < 3) { showErr('Password must be at least 3 characters.'); return; }
+      if (pw !== pw2) { showErr('Passwords do not match.'); return; }
+
+      const { error } = await db.from('profiles').upsert({
+        member_id: authUser,
+        password_hash: hash,
+        avatar_url: null
+      }, { onConflict: 'member_id' });
+
+      if (error) { showErr('Error saving profile. Check your Supabase setup.'); console.error(error); return; }
+      profilesCache[authUser] = { member_id: authUser, password_hash: hash, avatar_url: null };
+      await loginUser(authUser);
+
+    } else {
+      const p = profilesCache[authUser];
+      if (!p || p.password_hash !== hash) { showErr('Incorrect password.'); return; }
+      await loginUser(authUser);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'setup' ? 'Create Profile' : 'Login';
+  }
+}
+
+function showErr(msg) {
+  const err = document.getElementById('auth-error');
+  err.textContent = msg;
+  err.classList.add('show');
+}
+
+// ── CHAT ──
+async function loginUser(id) {
+  currentUser = id;
+  currentChat = null;
+  subscribeToMessages();
+  await renderChat();
+  showScreen('chat');
+}
+
+function subscribeToMessages() {
+  if (realtimeSub) realtimeSub.unsubscribe();
+  realtimeSub = db.channel('messages-channel')
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages'
+    }, payload => {
+      const msg = payload.new;
+      // Only handle messages relevant to current user
+      if (msg.from_id === currentUser || msg.to_id === currentUser) {
+        messagesCache.push(msg);
+        // If this chat is open, refresh it
+        if (currentChat && (
+          (msg.from_id === currentUser && msg.to_id === currentChat) ||
+          (msg.from_id === currentChat && msg.to_id === currentUser)
+        )) {
+          renderMessages(currentChat);
+          markAsRead(currentChat);
+        }
+        renderSidebarOnly();
+        // Mark as delivered if we're the recipient
+        if (msg.to_id === currentUser && msg.status === 'sent') {
+          db.from('messages').update({ status: 'delivered' }).eq('id', msg.id);
+        }
+      }
+    })
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'messages'
+    }, payload => {
+      const updated = payload.new;
+      const idx = messagesCache.findIndex(m => m.id === updated.id);
+      if (idx !== -1) messagesCache[idx] = updated;
+      if (currentChat) renderMessages(currentChat);
+    })
+    .subscribe();
+}
+
+async function renderChat() {
+  const me = getMember(currentUser);
+  document.getElementById('my-name-label').textContent = me.name;
+
+  // My avatar
+  const myAvBtn = document.getElementById('my-avatar-btn');
+  const myP = profilesCache[currentUser];
+  myAvBtn.innerHTML = `<div class="edit-overlay">📷</div>` + getAvatarHtml(currentUser);
+
+  // Load all messages for current user
+  const { data } = await db.from('messages')
+    .select('*')
+    .or(`from_id.eq.${currentUser},to_id.eq.${currentUser}`)
+    .order('created_at', { ascending: true });
+
+  messagesCache = data || [];
+  renderSidebarOnly();
+}
+
+function getConversationMessages(otherId) {
+  return messagesCache.filter(m =>
+    (m.from_id === currentUser && m.to_id === otherId) ||
+    (m.from_id === otherId && m.to_id === currentUser)
+  );
+}
+
+function getUnreadCount(fromId) {
+  return messagesCache.filter(m =>
+    m.from_id === fromId && m.to_id === currentUser && m.status !== 'read'
+  ).length;
+}
+
+function renderSidebarOnly() {
+  const list = document.getElementById('sidebar-list');
+  list.innerHTML = MEMBERS.filter(m => m.id !== currentUser).map(m => {
+    const msgs = getConversationMessages(m.id);
+    const last = msgs.length ? msgs[msgs.length - 1] : null;
+    let preview = 'No messages yet';
+    if (last) preview = (last.from_id === currentUser ? 'You: ' : '') + last.text;
+    const unread = getUnreadCount(m.id);
+    return `
+      <div class="member-item ${currentChat === m.id ? 'active' : ''}" onclick="openChat('${m.id}')">
+        <div class="av">${getAvatarHtml(m.id)}</div>
+        <div class="info">
+          <div class="nm">${m.name}</div>
+          <div class="preview">${escHtml(preview)}</div>
+        </div>
+        ${unread ? `<div class="unread-badge">${unread}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+async function openChat(memberId) {
+  currentChat = memberId;
+  const m = getMember(memberId);
+
+  document.getElementById('no-chat').style.display = 'none';
+  const activeChat = document.getElementById('active-chat');
+  activeChat.style.display = 'flex';
+
+  document.getElementById('chat-header').innerHTML = `
+    <div class="av">${getAvatarHtml(memberId)}</div>
+    <div>
+      <div class="hname">${m.name}</div>
+      <div class="hstatus">● Online</div>
+    </div>`;
+
+  renderMessages(memberId);
+  await markAsRead(memberId);
+  renderSidebarOnly();
+  document.getElementById('chat-input').focus();
+}
+
+async function markAsRead(fromId) {
+  const unread = messagesCache.filter(m =>
+    m.from_id === fromId && m.to_id === currentUser && m.status !== 'read'
+  );
+  if (!unread.length) return;
+  const ids = unread.map(m => m.id);
+  await db.from('messages').update({ status: 'read' }).in('id', ids);
+  unread.forEach(m => { m.status = 'read'; });
+}
+
+function renderMessages(memberId) {
+  const msgs = getConversationMessages(memberId);
+  const container = document.getElementById('messages');
+
+  if (!msgs.length) {
+    container.innerHTML = `<div class="empty-convo"><div class="big">👋</div><p>Say hello to ${getMember(memberId).name}!</p></div>`;
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+  msgs.forEach(msg => {
+    const d = new Date(msg.created_at);
+    const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    if (dateStr !== lastDate) {
+      html += `<div class="date-divider">${dateStr}</div>`;
+      lastDate = dateStr;
+    }
+    const isSent = msg.from_id === currentUser;
+    const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const tick = isSent ? getStatusTick(msg.status || 'sent') : '';
+    html += `
+      <div>
+        <div class="msg ${isSent ? 'sent' : 'recv'}">${escHtml(msg.text)}</div>
+        <div class="msg-time ${isSent ? 'right' : ''}">${timeStr}${tick}</div>
+      </div>`;
+  });
+
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+
+// Send
+document.getElementById('send-btn').onclick = sendMessage;
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !currentChat) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  const { data, error } = await db.from('messages').insert({
+    from_id: currentUser,
+    to_id: currentChat,
+    text: text,
+    status: 'sent'
+  }).select().single();
+
+  if (!error && data) {
+    messagesCache.push(data);
+    renderMessages(currentChat);
+    renderSidebarOnly();
+    // Simulate delivered after 1.2s
+    setTimeout(async () => {
+      await db.from('messages').update({ status: 'delivered' }).eq('id', data.id);
+      const idx = messagesCache.findIndex(m => m.id === data.id);
+      if (idx !== -1) messagesCache[idx].status = 'delivered';
+      if (currentChat) renderMessages(currentChat);
+    }, 1200);
+  }
+}
+
+// Logout
+document.getElementById('logout-btn').onclick = () => {
+  if (realtimeSub) realtimeSub.unsubscribe();
+  currentUser = null;
+  currentChat = null;
+  messagesCache = [];
+  renderSelect();
+  showScreen('select');
+};
+
+// Avatar upload
+document.getElementById('my-avatar-btn').onclick = () => document.getElementById('avatar-input').click();
+
+document.getElementById('avatar-input').onchange = async function() {
+  const file = this.files[0];
+  if (!file || !currentUser) return;
+
+  const ext = file.name.split('.').pop();
+  const path = `avatars/${currentUser}.${ext}`;
+
+  // Upload to Supabase Storage
+  const { error: upErr } = await db.storage.from('avatars').upload(path, file, { upsert: true });
+  if (upErr) { alert('Upload failed: ' + upErr.message); return; }
+
+  const { data: urlData } = db.storage.from('avatars').getPublicUrl(path);
+  const avatarUrl = urlData.publicUrl + '?t=' + Date.now(); // cache bust
+
+  await db.from('profiles').upsert({ member_id: currentUser, avatar_url: avatarUrl }, { onConflict: 'member_id' });
+  profilesCache[currentUser] = { ...profilesCache[currentUser], avatar_url: avatarUrl };
+
+  // Refresh UI
+  const myAvBtn = document.getElementById('my-avatar-btn');
+  myAvBtn.innerHTML = `<div class="edit-overlay">📷</div><img src="${avatarUrl}" />`;
+  renderSidebarOnly();
+  if (currentChat) openChat(currentChat);
+  this.value = '';
+};
+
+// Auto-resize textarea
+document.getElementById('chat-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// Start
+init();
+</script>
+</body>
+</html>
