@@ -659,7 +659,6 @@ async function openChat(memberId) {
     <div class="av">${getAvatarHtml(memberId)}</div>
     <div>
       <div class="hname">${m.name}</div>
-      <div class="hstatus">● Online</div>
     </div>`;
 
   renderMessages(memberId);
@@ -731,15 +730,9 @@ async function sendMessage() {
   }).select().single();
 
   if (!error && data) {
-    messagesCache.push(data);
-    renderMessages(currentChat);
-    renderSidebarOnly();
     // Simulate delivered after 1.2s
     setTimeout(async () => {
       await db.from('messages').update({ status: 'delivered' }).eq('id', data.id);
-      const idx = messagesCache.findIndex(m => m.id === data.id);
-      if (idx !== -1) messagesCache[idx].status = 'delivered';
-      if (currentChat) renderMessages(currentChat);
     }, 1200);
   }
 }
